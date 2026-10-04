@@ -27,7 +27,7 @@ input,select,button,label{font:inherit}input,select{padding:11px;border:1px soli
 </head>
 <body>
 <div class="app">
-<h1>Что делать?</h1><p class="subtitle">PWA • версия 2.0</p>
+<h1>Что делать?</h1><p class="subtitle">PWA • версия 2.1</p>
 <div class="panel">
 <div class="row"><input id="taskInput" placeholder="Что нужно сделать?"><input id="taskDate" type="date">
 <select id="priority"><option value="normal">Обычный</option><option value="high">Важный</option><option value="urgent">Срочный</option></select>
@@ -36,7 +36,7 @@ input,select,button,label{font:inherit}input,select{padding:11px;border:1px soli
 </div>
 <div class="panel">
 <div class="row"><input id="search" placeholder="Поиск по задачам..."></div>
-<div class="buttons" style="margin-top:10px"><button onclick="exportData()">Экспорт</button><label class="file">Импорт<input id="importFile" type="file" accept=".json"></label></div>
+<div class="buttons" style="margin-top:10px"><button onclick="testNotification()">🔔 Проверить уведомления</button><button onclick="exportData()">Экспорт</button><label class="file">Импорт<input id="importFile" type="file" accept=".json"></label></div>
 </div>
 <div class="filters">
 <button id="all" onclick="filterTo('all')">Все</button><button id="today" onclick="filterTo('today')">Сегодня</button>
@@ -75,6 +75,23 @@ function render(){
  [["✓ Выполнить",()=>toggle(i)],["→ На завтра",()=>postpone(i)],["Изменить",()=>edit(i)],["Удалить",()=>del(i)]].forEach(x=>{let z=document.createElement("button");z.textContent=t.done&&x[0][0]==="✓"?"↩ Вернуть":x[0];z.onclick=x[1];bs.appendChild(z)});el.appendChild(bs);list.appendChild(el)});
  $("info").textContent="Активных: "+tasks.filter(t=>!t.done).length+" • Просрочено: "+tasks.filter(t=>cat(t)==="overdue").length+" • Выполнено: "+tasks.filter(t=>t.done).length;
  document.querySelectorAll(".filters button").forEach(b=>b.classList.toggle("active",b.id===filter));
+}
+async function testNotification(){
+ if(!("Notification" in window)){alert("Этот браузер не поддерживает системные уведомления.");return}
+ let permission=Notification.permission;
+ if(permission!=="granted") permission=await Notification.requestPermission();
+ if(permission!=="granted"){alert("Уведомления не разрешены. Разрешите их для приложения в настройках Android.");return}
+ try{
+  const reg=await navigator.serviceWorker.ready;
+  await reg.showNotification("Что делать?",{
+   body:"Тестовое уведомление работает!",
+   icon:"./icon-192.png",
+   badge:"./icon-192.png",
+   tag:"chto-delat-test",
+   renotify:true,
+   vibrate:[200,100,200]
+  });
+ }catch(e){alert("Не удалось показать уведомление: "+e.message)}
 }
 function exportData(){let blob=new Blob([JSON.stringify({version:"2.0",tasks},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="chto-delat-backup-"+ds()+".json";a.click();URL.revokeObjectURL(a.href)}
 $("importFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let d=JSON.parse(r.result),a=Array.isArray(d)?d:d.tasks;if(!Array.isArray(a))throw 0;if(confirm("Заменить текущие задачи импортированными ("+a.length+")?")){tasks=a.map(norm);save();render()}}catch(_){alert("Не удалось прочитать резервную копию.")}e.target.value=""};r.readAsText(f)};

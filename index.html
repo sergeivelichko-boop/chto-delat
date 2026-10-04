@@ -27,9 +27,9 @@ input,select,button,label{font:inherit}input,select{padding:11px;border:1px soli
 </head>
 <body>
 <div class="app">
-<h1>Что делать?</h1><p class="subtitle">PWA • версия 2.1</p>
+<h1>Что делать?</h1><p class="subtitle">PWA • версия 2.2</p>
 <div class="panel">
-<div class="row"><input id="taskInput" placeholder="Что нужно сделать?"><input id="taskDate" type="date">
+<div class="row"><input id="taskInput" placeholder="Что нужно сделать?"><input id="taskDate" type="date"><input id="taskTime" type="time" title="Время напоминания">
 <select id="priority"><option value="normal">Обычный</option><option value="high">Важный</option><option value="urgent">Срочный</option></select>
 <button class="primary" onclick="addTask()">+ Добавить</button></div>
 <div class="quick"><button onclick="quick('today')">Сегодня</button><button onclick="quick('tomorrow')">Завтра</button><button onclick="quick('none')">Без срока</button></div>
@@ -50,17 +50,22 @@ let tasks=JSON.parse(localStorage.getItem(STORAGE)||"[]"),filter="all",query="";
 const $=id=>document.getElementById(id);
 function ds(d=new Date()){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function tomorrow(){let d=new Date();d.setDate(d.getDate()+1);return ds(d)}
-function norm(t){return {text:String(t.text||""),done:!!t.done,date:t.date||"",priority:t.priority||"normal"}}
+function norm(t){return {text:String(t.text||""),done:!!t.done,date:t.date||"",time:t.time||"",priority:t.priority||"normal"}}
 tasks=tasks.map(norm);
 function save(){localStorage.setItem(STORAGE,JSON.stringify(tasks))}
 function quick(x){$("taskDate").value=x==="today"?ds():x==="tomorrow"?tomorrow():""}
-function addTask(){let text=$("taskInput").value.trim();if(!text)return;$("taskInput").value="";tasks.push({text,done:false,date:$("taskDate").value,priority:$("priority").value});$("taskDate").value="";$("priority").value="normal";save();render()}
+function addTask(){let text=$("taskInput").value.trim();if(!text)return;$("taskInput").value="";tasks.push({text,done:false,date:$("taskDate").value,time:$("taskTime").value,priority:$("priority").value});$("taskDate").value="";$("taskTime").value="";$("priority").value="normal";save();render()}
 function cat(t){if(t.done)return"done";if(t.date&&t.date<ds())return"overdue";if(t.date===ds())return"today";if(t.date>ds())return"future";return"nodate"}
 function filterTo(x){filter=x;render()}
 function toggle(i){tasks[i].done=!tasks[i].done;save();render()}
 function postpone(i){tasks[i].date=tomorrow();tasks[i].done=false;save();render()}
 function del(i){if(confirm("Удалить задачу «"+tasks[i].text+"»?")){tasks.splice(i,1);save();render()}}
-function edit(i){let text=prompt("Измените задачу:",tasks[i].text);if(text===null)return;text=text.trim();if(!text)return;tasks[i].text=text;save();render()}
+function edit(i){
+ let text=prompt("Измените задачу:",tasks[i].text);if(text===null)return;text=text.trim();if(!text)return;
+ let date=prompt("Дата в формате ГГГГ-ММ-ДД (можно оставить пустой):",tasks[i].date||"");if(date===null)return;
+ let time=prompt("Время напоминания в формате ЧЧ:ММ (можно оставить пустым):",tasks[i].time||"");if(time===null)return;
+ tasks[i].text=text;tasks[i].date=date.trim();tasks[i].time=time.trim();save();render()
+}
 function visible(t){let c=cat(t);if(query&&!t.text.toLowerCase().includes(query))return false;if(filter==="all")return true;if(filter==="today")return c==="today"||c==="overdue";return c===filter}
 function rank(t){let o={overdue:0,today:1,future:2,nodate:3,done:4},p={urgent:0,high:1,normal:2};return [o[cat(t)],p[t.priority]??2,t.date||"9999"]}
 function render(){
@@ -70,7 +75,7 @@ function render(){
  arr.forEach(({t,i})=>{let c=cat(t);if(filter==="all"&&c!==last){let h=document.createElement("div");h.className="section";h.textContent={overdue:"Просрочено",today:"Сегодня",future:"Позже",nodate:"Без срока",done:"Выполненные"}[c];list.appendChild(h);last=c}
  let el=document.createElement("div");el.className="task "+c;
  let tx=document.createElement("div");tx.className="text";tx.textContent=t.text;let b=document.createElement("span");b.className="badge "+t.priority;b.textContent=t.priority==="urgent"?"Срочный":t.priority==="high"?"Важный":"Обычный";tx.appendChild(b);el.appendChild(tx);
- if(t.date){let m=document.createElement("div");m.className="meta";m.textContent=(c==="overdue"?"Просрочено: ":c==="today"?"Сегодня: ":"Срок: ")+t.date.split("-").reverse().join(".");el.appendChild(m)}
+ if(t.date){let m=document.createElement("div");m.className="meta";m.textContent=(c==="overdue"?"Просрочено: ":c==="today"?"Сегодня: ":"Срок: ")+t.date.split("-").reverse().join(".")+(t.time?" • "+t.time:"");el.appendChild(m)}
  let bs=document.createElement("div");bs.className="buttons";
  [["✓ Выполнить",()=>toggle(i)],["→ На завтра",()=>postpone(i)],["Изменить",()=>edit(i)],["Удалить",()=>del(i)]].forEach(x=>{let z=document.createElement("button");z.textContent=t.done&&x[0][0]==="✓"?"↩ Вернуть":x[0];z.onclick=x[1];bs.appendChild(z)});el.appendChild(bs);list.appendChild(el)});
  $("info").textContent="Активных: "+tasks.filter(t=>!t.done).length+" • Просрочено: "+tasks.filter(t=>cat(t)==="overdue").length+" • Выполнено: "+tasks.filter(t=>t.done).length;

@@ -22,86 +22,720 @@ input,select,button,label{font:inherit}input,select{padding:11px;border:1px soli
 .meta{font-size:13px;color:#777;margin-top:7px}.badge{font-size:12px;margin-left:7px;padding:3px 7px;border-radius:6px;background:#eee}
 .high{background:#fff0d8}.urgent{background:#ffe0e0}.buttons{margin-top:12px}.file input{display:none}
 .empty{text-align:center;background:#fff;padding:30px;border-radius:12px;color:#888}
+.push-status{margin-top:10px;font-size:14px;color:#666}
 @media(max-width:650px){body{padding:15px 8px}.row{flex-direction:column}#taskInput,#search{width:100%}}
 </style>
 </head>
+
 <body>
 <div class="app">
-<h1>Что делать?</h1><p class="subtitle">PWA • версия 2.2</p>
+
+<h1>Что делать?</h1>
+<p class="subtitle">PWA • версия 2.3</p>
+
 <div class="panel">
-<div class="row"><input id="taskInput" placeholder="Что нужно сделать?"><input id="taskDate" type="date"><input id="taskTime" type="time" title="Время напоминания">
-<select id="priority"><option value="normal">Обычный</option><option value="high">Важный</option><option value="urgent">Срочный</option></select>
-<button class="primary" onclick="addTask()">+ Добавить</button></div>
-<div class="quick"><button onclick="quick('today')">Сегодня</button><button onclick="quick('tomorrow')">Завтра</button><button onclick="quick('none')">Без срока</button></div>
+<div class="row">
+<input id="taskInput" placeholder="Что нужно сделать?">
+<input id="taskDate" type="date">
+<input id="taskTime" type="time" title="Время напоминания">
+
+<select id="priority">
+<option value="normal">Обычный</option>
+<option value="high">Важный</option>
+<option value="urgent">Срочный</option>
+</select>
+
+<button class="primary" onclick="addTask()">+ Добавить</button>
 </div>
+
+<div class="quick">
+<button onclick="quick('today')">Сегодня</button>
+<button onclick="quick('tomorrow')">Завтра</button>
+<button onclick="quick('none')">Без срока</button>
+</div>
+</div>
+
 <div class="panel">
-<div class="row"><input id="search" placeholder="Поиск по задачам..."></div>
-<div class="buttons" style="margin-top:10px"><button onclick="testNotification()">🔔 Проверить уведомления</button><button onclick="exportData()">Экспорт</button><label class="file">Импорт<input id="importFile" type="file" accept=".json"></label></div>
+
+<div class="row">
+<input id="search" placeholder="Поиск по задачам...">
 </div>
+
+<div class="buttons" style="margin-top:10px">
+<button class="primary" onclick="enablePush()">🔔 Подключить Push</button>
+<button onclick="testNotification()">Проверить уведомления</button>
+<button onclick="exportData()">Экспорт</button>
+
+<label class="file">
+Импорт
+<input id="importFile" type="file" accept=".json">
+</label>
+</div>
+
+<div id="pushStatus" class="push-status">
+Push ещё не проверен.
+</div>
+
+</div>
+
 <div class="filters">
-<button id="all" onclick="filterTo('all')">Все</button><button id="today" onclick="filterTo('today')">Сегодня</button>
-<button id="overdue" onclick="filterTo('overdue')">Просрочено</button><button id="future" onclick="filterTo('future')">Позже</button><button id="done" onclick="filterTo('done')">Выполненные</button>
+<button id="all" onclick="filterTo('all')">Все</button>
+<button id="today" onclick="filterTo('today')">Сегодня</button>
+<button id="overdue" onclick="filterTo('overdue')">Просрочено</button>
+<button id="future" onclick="filterTo('future')">Позже</button>
+<button id="done" onclick="filterTo('done')">Выполненные</button>
 </div>
-<div id="info" class="info"></div><div id="list"></div>
+
+<div id="info" class="info"></div>
+<div id="list"></div>
+
 </div>
+
 <script>
+
 const STORAGE="tasks";
-let tasks=JSON.parse(localStorage.getItem(STORAGE)||"[]"),filter="all",query="";
+
+const VAPID_PUBLIC_KEY =
+"BFe-damI0Yw8TnSlyeqJ9t5YM8xavVULo01WfyUK8Jj8Y8Y_UB2oDfb_EmScW16M-BSzfyfQWmcxjbGCDLVQYdw";
+
+const REGISTER_PUSH_URL =
+"https://lnoamstuhwlkjxylrhsy.supabase.co/functions/v1/register-push";
+
+let tasks=JSON.parse(localStorage.getItem(STORAGE)||"[]"),
+filter="all",
+query="";
+
 const $=id=>document.getElementById(id);
-function ds(d=new Date()){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
-function tomorrow(){let d=new Date();d.setDate(d.getDate()+1);return ds(d)}
-function norm(t){return {text:String(t.text||""),done:!!t.done,date:t.date||"",time:t.time||"",priority:t.priority||"normal"}}
+
+function ds(d=new Date()){
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")
+}
+
+function tomorrow(){
+ let d=new Date();
+ d.setDate(d.getDate()+1);
+ return ds(d)
+}
+
+function norm(t){
+ return {
+  text:String(t.text||""),
+  done:!!t.done,
+  date:t.date||"",
+  time:t.time||"",
+  priority:t.priority||"normal"
+ }
+}
+
 tasks=tasks.map(norm);
-function save(){localStorage.setItem(STORAGE,JSON.stringify(tasks))}
-function quick(x){$("taskDate").value=x==="today"?ds():x==="tomorrow"?tomorrow():""}
-function addTask(){let text=$("taskInput").value.trim();if(!text)return;$("taskInput").value="";tasks.push({text,done:false,date:$("taskDate").value,time:$("taskTime").value,priority:$("priority").value});$("taskDate").value="";$("taskTime").value="";$("priority").value="normal";save();render()}
-function cat(t){if(t.done)return"done";if(t.date&&t.date<ds())return"overdue";if(t.date===ds())return"today";if(t.date>ds())return"future";return"nodate"}
-function filterTo(x){filter=x;render()}
-function toggle(i){tasks[i].done=!tasks[i].done;save();render()}
-function postpone(i){tasks[i].date=tomorrow();tasks[i].done=false;save();render()}
-function del(i){if(confirm("Удалить задачу «"+tasks[i].text+"»?")){tasks.splice(i,1);save();render()}}
+
+function save(){
+ localStorage.setItem(STORAGE,JSON.stringify(tasks))
+}
+
+function quick(x){
+ $("taskDate").value=x==="today"?ds():x==="tomorrow"?tomorrow():""
+}
+
+function addTask(){
+ let text=$("taskInput").value.trim();
+ if(!text)return;
+
+ $("taskInput").value="";
+
+ tasks.push({
+  text,
+  done:false,
+  date:$("taskDate").value,
+  time:$("taskTime").value,
+  priority:$("priority").value
+ });
+
+ $("taskDate").value="";
+ $("taskTime").value="";
+ $("priority").value="normal";
+
+ save();
+ render();
+}
+
+function cat(t){
+ if(t.done)return"done";
+ if(t.date&&t.date<ds())return"overdue";
+ if(t.date===ds())return"today";
+ if(t.date>ds())return"future";
+ return"nodate"
+}
+
+function filterTo(x){
+ filter=x;
+ render()
+}
+
+function toggle(i){
+ tasks[i].done=!tasks[i].done;
+ save();
+ render()
+}
+
+function postpone(i){
+ tasks[i].date=tomorrow();
+ tasks[i].done=false;
+ save();
+ render()
+}
+
+function del(i){
+ if(confirm("Удалить задачу «"+tasks[i].text+"»?")){
+  tasks.splice(i,1);
+  save();
+  render()
+ }
+}
+
 function edit(i){
- let text=prompt("Измените задачу:",tasks[i].text);if(text===null)return;text=text.trim();if(!text)return;
- let date=prompt("Дата в формате ГГГГ-ММ-ДД (можно оставить пустой):",tasks[i].date||"");if(date===null)return;
- let time=prompt("Время напоминания в формате ЧЧ:ММ (можно оставить пустым):",tasks[i].time||"");if(time===null)return;
- tasks[i].text=text;tasks[i].date=date.trim();tasks[i].time=time.trim();save();render()
+
+ let text=prompt("Измените задачу:",tasks[i].text);
+ if(text===null)return;
+
+ text=text.trim();
+ if(!text)return;
+
+ let date=prompt(
+  "Дата в формате ГГГГ-ММ-ДД (можно оставить пустой):",
+  tasks[i].date||""
+ );
+
+ if(date===null)return;
+
+ let time=prompt(
+  "Время напоминания в формате ЧЧ:ММ (можно оставить пустым):",
+  tasks[i].time||""
+ );
+
+ if(time===null)return;
+
+ tasks[i].text=text;
+ tasks[i].date=date.trim();
+ tasks[i].time=time.trim();
+
+ save();
+ render();
 }
-function visible(t){let c=cat(t);if(query&&!t.text.toLowerCase().includes(query))return false;if(filter==="all")return true;if(filter==="today")return c==="today"||c==="overdue";return c===filter}
-function rank(t){let o={overdue:0,today:1,future:2,nodate:3,done:4},p={urgent:0,high:1,normal:2};return [o[cat(t)],p[t.priority]??2,t.date||"9999"]}
+
+function visible(t){
+
+ let c=cat(t);
+
+ if(query&&!t.text.toLowerCase().includes(query))
+  return false;
+
+ if(filter==="all")
+  return true;
+
+ if(filter==="today")
+  return c==="today"||c==="overdue";
+
+ return c===filter;
+}
+
+function rank(t){
+
+ let o={
+  overdue:0,
+  today:1,
+  future:2,
+  nodate:3,
+  done:4
+ };
+
+ let p={
+  urgent:0,
+  high:1,
+  normal:2
+ };
+
+ return [
+  o[cat(t)],
+  p[t.priority]??2,
+  t.date||"9999"
+ ];
+}
+
 function render(){
- let list=$("list");list.innerHTML="";let arr=tasks.map((t,i)=>({t,i})).filter(x=>visible(x.t)).sort((a,b)=>{let A=rank(a.t),B=rank(b.t);return A[0]-B[0]||A[1]-B[1]||A[2].localeCompare(B[2])});
- if(!arr.length){list.innerHTML='<div class="empty">Задач здесь нет.</div>'}
+
+ let list=$("list");
+
+ list.innerHTML="";
+
+ let arr=tasks
+ .map((t,i)=>({t,i}))
+ .filter(x=>visible(x.t))
+ .sort((a,b)=>{
+
+  let A=rank(a.t),
+      B=rank(b.t);
+
+  return A[0]-B[0]||
+         A[1]-B[1]||
+         A[2].localeCompare(B[2]);
+ });
+
+ if(!arr.length){
+  list.innerHTML='<div class="empty">Задач здесь нет.</div>'
+ }
+
  let last="";
- arr.forEach(({t,i})=>{let c=cat(t);if(filter==="all"&&c!==last){let h=document.createElement("div");h.className="section";h.textContent={overdue:"Просрочено",today:"Сегодня",future:"Позже",nodate:"Без срока",done:"Выполненные"}[c];list.appendChild(h);last=c}
- let el=document.createElement("div");el.className="task "+c;
- let tx=document.createElement("div");tx.className="text";tx.textContent=t.text;let b=document.createElement("span");b.className="badge "+t.priority;b.textContent=t.priority==="urgent"?"Срочный":t.priority==="high"?"Важный":"Обычный";tx.appendChild(b);el.appendChild(tx);
- if(t.date){let m=document.createElement("div");m.className="meta";m.textContent=(c==="overdue"?"Просрочено: ":c==="today"?"Сегодня: ":"Срок: ")+t.date.split("-").reverse().join(".")+(t.time?" • "+t.time:"");el.appendChild(m)}
- let bs=document.createElement("div");bs.className="buttons";
- [["✓ Выполнить",()=>toggle(i)],["→ На завтра",()=>postpone(i)],["Изменить",()=>edit(i)],["Удалить",()=>del(i)]].forEach(x=>{let z=document.createElement("button");z.textContent=t.done&&x[0][0]==="✓"?"↩ Вернуть":x[0];z.onclick=x[1];bs.appendChild(z)});el.appendChild(bs);list.appendChild(el)});
- $("info").textContent="Активных: "+tasks.filter(t=>!t.done).length+" • Просрочено: "+tasks.filter(t=>cat(t)==="overdue").length+" • Выполнено: "+tasks.filter(t=>t.done).length;
- document.querySelectorAll(".filters button").forEach(b=>b.classList.toggle("active",b.id===filter));
-}
-async function testNotification(){
- if(!("Notification" in window)){alert("Этот браузер не поддерживает системные уведомления.");return}
- let permission=Notification.permission;
- if(permission!=="granted") permission=await Notification.requestPermission();
- if(permission!=="granted"){alert("Уведомления не разрешены. Разрешите их для приложения в настройках Android.");return}
- try{
-  const reg=await navigator.serviceWorker.ready;
-  await reg.showNotification("Что делать?",{
-   body:"Тестовое уведомление работает!",
-   icon:"./icon-192.png",
-   badge:"./icon-192.png",
-   tag:"chto-delat-test",
-   renotify:true,
-   vibrate:[200,100,200]
+
+ arr.forEach(({t,i})=>{
+
+  let c=cat(t);
+
+  if(filter==="all"&&c!==last){
+
+   let h=document.createElement("div");
+
+   h.className="section";
+
+   h.textContent={
+    overdue:"Просрочено",
+    today:"Сегодня",
+    future:"Позже",
+    nodate:"Без срока",
+    done:"Выполненные"
+   }[c];
+
+   list.appendChild(h);
+
+   last=c;
+  }
+
+  let el=document.createElement("div");
+
+  el.className="task "+c;
+
+  let tx=document.createElement("div");
+
+  tx.className="text";
+  tx.textContent=t.text;
+
+  let b=document.createElement("span");
+
+  b.className="badge "+t.priority;
+
+  b.textContent=
+   t.priority==="urgent"
+   ?"Срочный"
+   :t.priority==="high"
+   ?"Важный"
+   :"Обычный";
+
+  tx.appendChild(b);
+
+  el.appendChild(tx);
+
+  if(t.date){
+
+   let m=document.createElement("div");
+
+   m.className="meta";
+
+   m.textContent=
+    (c==="overdue"
+     ?"Просрочено: "
+     :c==="today"
+     ?"Сегодня: "
+     :"Срок: ")
+    +
+    t.date.split("-").reverse().join(".")
+    +
+    (t.time?" • "+t.time:"");
+
+   el.appendChild(m);
+  }
+
+  let bs=document.createElement("div");
+
+  bs.className="buttons";
+
+  [
+   ["✓ Выполнить",()=>toggle(i)],
+   ["→ На завтра",()=>postpone(i)],
+   ["Изменить",()=>edit(i)],
+   ["Удалить",()=>del(i)]
+  ].forEach(x=>{
+
+   let z=document.createElement("button");
+
+   z.textContent=
+    t.done&&x[0][0]==="✓"
+    ?"↩ Вернуть"
+    :x[0];
+
+   z.onclick=x[1];
+
+   bs.appendChild(z);
   });
- }catch(e){alert("Не удалось показать уведомление: "+e.message)}
+
+  el.appendChild(bs);
+
+  list.appendChild(el);
+ });
+
+ $("info").textContent=
+  "Активных: "+
+  tasks.filter(t=>!t.done).length+
+  " • Просрочено: "+
+  tasks.filter(t=>cat(t)==="overdue").length+
+  " • Выполнено: "+
+  tasks.filter(t=>t.done).length;
+
+ document
+ .querySelectorAll(".filters button")
+ .forEach(b=>
+  b.classList.toggle("active",b.id===filter)
+ );
 }
-function exportData(){let blob=new Blob([JSON.stringify({version:"2.0",tasks},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="chto-delat-backup-"+ds()+".json";a.click();URL.revokeObjectURL(a.href)}
-$("importFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let d=JSON.parse(r.result),a=Array.isArray(d)?d:d.tasks;if(!Array.isArray(a))throw 0;if(confirm("Заменить текущие задачи импортированными ("+a.length+")?")){tasks=a.map(norm);save();render()}}catch(_){alert("Не удалось прочитать резервную копию.")}e.target.value=""};r.readAsText(f)};
-$("search").oninput=e=>{query=e.target.value.trim().toLowerCase();render()};$("taskInput").onkeydown=e=>{if(e.key==="Enter")addTask()};
-if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(console.error))}
+
+
+// ------------------------------
+// PUSH
+// ------------------------------
+
+function urlBase64ToUint8Array(base64String){
+
+ const padding=
+  "=".repeat((4-base64String.length%4)%4);
+
+ const base64=
+  (base64String+padding)
+  .replace(/-/g,"+")
+  .replace(/_/g,"/");
+
+ const rawData=window.atob(base64);
+
+ return Uint8Array.from(
+  [...rawData].map(char=>char.charCodeAt(0))
+ );
+}
+
+
+async function enablePush(){
+
+ const status=$("pushStatus");
+
+ try{
+
+  if(!("serviceWorker" in navigator)){
+   throw new Error("Service Worker не поддерживается этим браузером.");
+  }
+
+  if(!("PushManager" in window)){
+   throw new Error("Web Push не поддерживается этим браузером.");
+  }
+
+  if(!("Notification" in window)){
+   throw new Error("Уведомления не поддерживаются.");
+  }
+
+  status.textContent="Подключаем Push…";
+
+  let permission=Notification.permission;
+
+  if(permission!=="granted"){
+   permission=await Notification.requestPermission();
+  }
+
+  if(permission!=="granted"){
+   throw new Error("Разрешение на уведомления не предоставлено.");
+  }
+
+  const registration=
+   await navigator.serviceWorker.ready;
+
+  let subscription=
+   await registration.pushManager.getSubscription();
+
+  if(!subscription){
+
+   subscription=
+    await registration.pushManager.subscribe({
+     userVisibleOnly:true,
+     applicationServerKey:
+      urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+  }
+
+  const response=await fetch(
+   REGISTER_PUSH_URL,
+   {
+    method:"POST",
+
+    headers:{
+     "Content-Type":"application/json"
+    },
+
+    body:JSON.stringify(
+     subscription.toJSON()
+    )
+   }
+  );
+
+  const result=await response.json();
+
+  if(!response.ok||!result.ok){
+   throw new Error(
+    result.error||
+    "Supabase не смог сохранить Push-подписку."
+   );
+  }
+
+  localStorage.setItem(
+   "chto-delat-push-subscription-id",
+   String(result.subscription_id)
+  );
+
+  status.textContent=
+   "✅ Push подключён. Телефон зарегистрирован.";
+
+  alert(
+   "Push-уведомления подключены!\n\n"+
+   "Телефон зарегистрирован в приложении «Что делать?»."
+  );
+
+ }catch(error){
+
+  console.error(error);
+
+  status.textContent=
+   "❌ Push не подключён: "+
+   error.message;
+
+  alert(
+   "Не удалось подключить Push:\n\n"+
+   error.message
+  );
+ }
+}
+
+
+async function checkPushStatus(){
+
+ if(!("serviceWorker" in navigator)||
+    !("PushManager" in window)){
+  return;
+ }
+
+ try{
+
+  const registration=
+   await navigator.serviceWorker.ready;
+
+  const subscription=
+   await registration.pushManager.getSubscription();
+
+  if(subscription){
+
+   $("pushStatus").textContent=
+    "✅ Этот браузер уже имеет Push-подписку.";
+
+  }else{
+
+   $("pushStatus").textContent=
+    "Push ещё не подключён.";
+  }
+
+ }catch(e){
+
+  console.error(e);
+ }
+}
+
+
+// ------------------------------
+// ЛОКАЛЬНЫЙ ТЕСТ УВЕДОМЛЕНИЯ
+// ------------------------------
+
+async function testNotification(){
+
+ if(!("Notification" in window)){
+
+  alert(
+   "Этот браузер не поддерживает системные уведомления."
+  );
+
+  return;
+ }
+
+ let permission=Notification.permission;
+
+ if(permission!=="granted")
+  permission=
+   await Notification.requestPermission();
+
+ if(permission!=="granted"){
+
+  alert(
+   "Уведомления не разрешены. "+
+   "Разрешите их для приложения в настройках Android."
+  );
+
+  return;
+ }
+
+ try{
+
+  const reg=
+   await navigator.serviceWorker.ready;
+
+  await reg.showNotification(
+   "Что делать?",
+   {
+    body:"Тестовое уведомление работает!",
+    icon:"./icon-192.png",
+    badge:"./icon-192.png",
+    tag:"chto-delat-test",
+    renotify:true,
+    vibrate:[200,100,200]
+   }
+  );
+
+ }catch(e){
+
+  alert(
+   "Не удалось показать уведомление: "+
+   e.message
+  );
+ }
+}
+
+
+function exportData(){
+
+ let blob=
+  new Blob(
+   [
+    JSON.stringify(
+     {
+      version:"2.3",
+      tasks
+     },
+     null,
+     2
+    )
+   ],
+   {
+    type:"application/json"
+   }
+  );
+
+ let a=document.createElement("a");
+
+ a.href=URL.createObjectURL(blob);
+
+ a.download=
+  "chto-delat-backup-"+ds()+".json";
+
+ a.click();
+
+ URL.revokeObjectURL(a.href);
+}
+
+
+$("importFile").onchange=e=>{
+
+ let f=e.target.files[0];
+
+ if(!f)return;
+
+ let r=new FileReader();
+
+ r.onload=()=>{
+
+  try{
+
+   let d=JSON.parse(r.result);
+
+   let a=
+    Array.isArray(d)
+    ?d
+    :d.tasks;
+
+   if(!Array.isArray(a))
+    throw 0;
+
+   if(
+    confirm(
+     "Заменить текущие задачи импортированными ("+
+     a.length+
+     ")?"
+    )
+   ){
+
+    tasks=a.map(norm);
+
+    save();
+
+    render();
+   }
+
+  }catch(_){
+
+   alert(
+    "Не удалось прочитать резервную копию."
+   );
+  }
+
+  e.target.value="";
+ };
+
+ r.readAsText(f);
+};
+
+
+$("search").oninput=e=>{
+
+ query=
+  e.target.value
+  .trim()
+  .toLowerCase();
+
+ render();
+};
+
+
+$("taskInput").onkeydown=e=>{
+
+ if(e.key==="Enter")
+  addTask();
+};
+
+
+if("serviceWorker" in navigator){
+
+ window.addEventListener(
+  "load",
+  async()=>{
+
+   try{
+
+    await navigator.serviceWorker.register(
+     "./service-worker.js"
+    );
+
+    await checkPushStatus();
+
+   }catch(e){
+
+    console.error(e);
+   }
+  }
+ );
+}
+
+
 render();
+
 </script>
-</body></html>
+</body>
+</html>

@@ -456,13 +456,42 @@ async function enablePush(){
   let subscription=
    await registration.pushManager.getSubscription();
 
+  const applicationServerKey=
+   urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+  if(subscription){
+
+   const existingKey=
+    subscription.options?.applicationServerKey;
+
+   const existingKeyBytes=
+    existingKey ? new Uint8Array(existingKey) : null;
+
+   const keyMatches=
+    existingKeyBytes &&
+    existingKeyBytes.length===applicationServerKey.length &&
+    applicationServerKey.every(
+     (byte,index)=>byte===existingKeyBytes[index]
+    );
+
+   if(!keyMatches){
+
+    const unsubscribed=await subscription.unsubscribe();
+
+    if(!unsubscribed){
+     throw new Error("Не удалось удалить старую Push-подписку.");
+    }
+
+    subscription=null;
+   }
+  }
+
   if(!subscription){
 
    subscription=
     await registration.pushManager.subscribe({
      userVisibleOnly:true,
-     applicationServerKey:
-      urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+     applicationServerKey
     });
   }
 

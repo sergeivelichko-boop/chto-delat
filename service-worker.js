@@ -1,4 +1,4 @@
-const CACHE = "chto-delat-v2-8";
+const CACHE = "chto-delat-v2-9";
 
 const FILES = [
   "./",

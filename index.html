@@ -31,7 +31,7 @@ input,select,button,label{font:inherit}input,select{padding:11px;border:1px soli
 <div class="app">
 
 <h1>Что делать?</h1>
-<p class="subtitle">PWA • версия 2.7</p>
+<p class="subtitle">PWA • версия 2.8</p>
 
 <div class="panel">
 <div class="row">
@@ -210,6 +210,17 @@ function deleteReminder(taskId){
   task_id:taskId
  });
 }
+
+function syncAllReminders(){
+ tasks.forEach(
+  task=>void syncReminder(task)
+ );
+}
+
+window.addEventListener(
+ "online",
+ syncAllReminders
+);
 
 function quick(x){
  $("taskDate").value=x==="today"?ds():x==="tomorrow"?tomorrow():""
@@ -733,7 +744,7 @@ function exportData(){
    [
     JSON.stringify(
      {
-      version:"2.7",
+      version:"2.8",
       tasks
      },
      null,
@@ -879,6 +890,7 @@ if("serviceWorker" in navigator){
 
 
 render();
+syncAllReminders();
 
 </script>
 </body>

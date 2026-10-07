@@ -101,6 +101,12 @@ const VAPID_PUBLIC_KEY =
 const REGISTER_PUSH_URL =
 "https://lnoamstuhwlkjxylrhsy.supabase.co/functions/v1/register-push";
 
+const SYNC_REMINDER_URL =
+"https://lnoamstuhwlkjxylrhsy.supabase.co/functions/v1/sync-reminder";
+
+const SUPABASE_PUBLISHABLE_KEY =
+"sb_publishable_RkDNgMi3RQtjNwkUQKBHxw_Z6oSUHqO";
+
 let tasks=JSON.parse(localStorage.getItem(STORAGE)||"[]"),
 filter="all",
 query="";
@@ -119,6 +125,7 @@ function tomorrow(){
 
 function norm(t){
  return {
+  id:t.id||crypto.randomUUID(),
   text:String(t.text||""),
   done:!!t.done,
   date:t.date||"",
@@ -128,9 +135,80 @@ function norm(t){
 }
 
 tasks=tasks.map(norm);
+save();
 
 function save(){
  localStorage.setItem(STORAGE,JSON.stringify(tasks))
+}
+
+async function sendReminderRequest(body){
+
+ try{
+
+  const response=await fetch(
+   SYNC_REMINDER_URL,
+   {
+    method:"POST",
+
+    headers:{
+     "Authorization":
+      "Bearer "+SUPABASE_PUBLISHABLE_KEY,
+     "apikey":SUPABASE_PUBLISHABLE_KEY,
+     "Content-Type":"application/json"
+    },
+
+    body:JSON.stringify(body)
+   }
+  );
+
+  const result=await response.json();
+
+  if(!response.ok||!result.ok){
+   throw new Error(
+    result.error||
+    "Сервер не смог сохранить напоминание."
+   );
+  }
+
+ }catch(error){
+
+  console.error(error);
+
+  $("pushStatus").textContent=
+   "⚠️ Задача сохранена на устройстве, "+
+   "но напоминание не синхронизировано: "+
+   error.message;
+ }
+}
+
+function syncReminder(task){
+
+ if(task.done||!task.date||!task.time){
+  return sendReminderRequest({
+   action:"delete",
+   task_id:task.id
+  });
+ }
+
+ const remindAt=
+  new Date(task.date+"T"+task.time+":00");
+
+ if(Number.isNaN(remindAt.getTime())){
+  return Promise.resolve();
+ }
+
+ return sendReminderRequest({
+  task_id:task.id,
+  title:task.text,
+  remind_at:remindAt.toISOString()
+ });
+}
+
+function deleteReminder(taskId){
+ return sendReminderRequest({
+  action:"delete",
+  task_id:taskId
+ });
 }
 
 function quick(x){
@@ -143,13 +221,16 @@ function addTask(){
 
  $("taskInput").value="";
 
- tasks.push({
+ const task={
+  id:crypto.randomUUID(),
   text,
   done:false,
   date:$("taskDate").value,
   time:$("taskTime").value,
   priority:$("priority").value
- });
+ };
+
+ tasks.push(task);
 
  $("taskDate").value="";
  $("taskTime").value="";
@@ -157,6 +238,7 @@ function addTask(){
 
  save();
  render();
+ void syncReminder(task);
 }
 
 function cat(t){
@@ -175,21 +257,25 @@ function filterTo(x){
 function toggle(i){
  tasks[i].done=!tasks[i].done;
  save();
- render()
+ render();
+ void syncReminder(tasks[i])
 }
 
 function postpone(i){
  tasks[i].date=tomorrow();
  tasks[i].done=false;
  save();
- render()
+ render();
+ void syncReminder(tasks[i])
 }
 
 function del(i){
  if(confirm("Удалить задачу «"+tasks[i].text+"»?")){
+  const taskId=tasks[i].id;
   tasks.splice(i,1);
   save();
-  render()
+  render();
+  void deleteReminder(taskId)
  }
 }
 
@@ -221,6 +307,7 @@ function edit(i){
 
  save();
  render();
+ void syncReminder(tasks[i]);
 }
 
 function visible(t){
@@ -701,11 +788,22 @@ $("importFile").onchange=e=>{
     )
    ){
 
+    const oldTaskIds=
+     tasks.map(t=>t.id);
+
     tasks=a.map(norm);
 
     save();
 
     render();
+
+    oldTaskIds.forEach(
+     id=>void deleteReminder(id)
+    );
+
+    tasks.forEach(
+     task=>void syncReminder(task)
+    );
    }
 
   }catch(_){

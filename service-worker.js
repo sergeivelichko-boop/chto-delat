@@ -1,4 +1,4 @@
-const CACHE = "chto-delat-v2-4";
+const CACHE = "chto-delat-v2-5";
 
 const FILES = [
   "./",
@@ -31,6 +31,28 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      (async () => {
+        try {
+          const response = await fetch(event.request);
+          const cache = await caches.open(CACHE);
+
+          await cache.put("./index.html", response.clone());
+
+          return response;
+        } catch {
+          return (
+            (await caches.match("./index.html")) ||
+            (await caches.match("./"))
+          );
+        }
+      })()
+    );
+
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       return cached || fetch(event.request);
